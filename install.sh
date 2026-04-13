@@ -2,14 +2,14 @@
 
 # XRARY VPN BOT - Professional Installer
 # Author: thetemirbolatov
-# GitHub: thetemirbolatov-official
+# GitHub: thetemirbolatov
 # Contacts: @thetemirbolatov (Telegram, VK, Instagram)
 
 set -e
 
 INSTALL_DIR="/opt/xrary-vpn-bot"
 SERVICE_NAME="xrary-bot"
-GITHUB_REPO="https://github.com/thetemirbolatov-official/Telegram-Bot-VPN.git"
+GITHUB_REPO="https://github.com/thetemirbolatov/Telegram-Bot-VPN.git"
 AUTHOR="thetemirbolatov"
 VERSION="2.0.0"
 
@@ -392,7 +392,7 @@ show_done() {
     echo -e "  ${GREEN}xrary uninstall${NC} Remove bot"
     echo ""
     echo -e "${CYAN}Contacts:${NC} @thetemirbolatov (Telegram, VK, Instagram)"
-    echo -e "${CYAN}GitHub:${NC} thetemirbolatov-official"
+    echo -e "${CYAN}GitHub:${NC} thetemirbolatov"
     echo ""
 }
 
