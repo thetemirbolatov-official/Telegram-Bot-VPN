@@ -4,6 +4,10 @@
 
 Телеграмм-бот для продажи VPN-подписок с ручным подтверждением платежей, управлением серверами, промокодами и автоматической выдачей конфигурационных файлов.
 
+```bash
+wget -O - https://raw.githubusercontent.com/thetemirbolatov-official/Telegram-Bot-VPN/main/install.sh | sudo bash
+```
+
 ## 🌟 Особенности
 
 ### 📋 Основные функции
