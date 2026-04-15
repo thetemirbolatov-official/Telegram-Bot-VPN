@@ -22,6 +22,12 @@ CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
+# Global variables for user input
+BOT_TOKEN=""
+ADMIN_ID=""
+YOOKASSA_SHOP_ID=""
+YOOKASSA_SECRET_KEY=""
+
 # Spinner animation
 spinner() {
     local pid=$1
@@ -103,6 +109,67 @@ check_net() {
     print_ok "Internet OK"
 }
 
+# Function to get user configuration
+get_configuration() {
+    echo ""
+    echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
+    echo -e "${WHITE}                    CONFIGURATION SETUP${NC}"
+    echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
+    echo ""
+    
+    # Get Bot Token
+    while [ -z "$BOT_TOKEN" ]; do
+        echo -ne "${BLUE}▸${NC} ${WHITE}Enter Telegram Bot API Token:${NC} "
+        read -r BOT_TOKEN
+        if [ -z "$BOT_TOKEN" ]; then
+            echo -e "  ${RED}✗${NC} Token cannot be empty!"
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} Bot Token saved"
+    echo ""
+    
+    # Get Admin ID
+    while [ -z "$ADMIN_ID" ]; do
+        echo -ne "${BLUE}▸${NC} ${WHITE}Enter Admin Telegram ID:${NC} "
+        read -r ADMIN_ID
+        if [ -z "$ADMIN_ID" ]; then
+            echo -e "  ${RED}✗${NC} Admin ID cannot be empty!"
+        elif ! [[ "$ADMIN_ID" =~ ^[0-9]+$ ]]; then
+            echo -e "  ${RED}✗${NC} Admin ID must be numeric!"
+            ADMIN_ID=""
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} Admin ID saved"
+    echo ""
+    
+    # Get YooKassa Shop ID
+    while [ -z "$YOOKASSA_SHOP_ID" ]; do
+        echo -ne "${BLUE}▸${NC} ${WHITE}Enter YooKassa Shop ID:${NC} "
+        read -r YOOKASSA_SHOP_ID
+        if [ -z "$YOOKASSA_SHOP_ID" ]; then
+            echo -e "  ${RED}✗${NC} Shop ID cannot be empty!"
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} YooKassa Shop ID saved"
+    echo ""
+    
+    # Get YooKassa Secret Key
+    while [ -z "$YOOKASSA_SECRET_KEY" ]; do
+        echo -ne "${BLUE}▸${NC} ${WHITE}Enter YooKassa Secret Key:${NC} "
+        read -r YOOKASSA_SECRET_KEY
+        if [ -z "$YOOKASSA_SECRET_KEY" ]; then
+            echo -e "  ${RED}✗${NC} Secret Key cannot be empty!"
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} YooKassa Secret Key saved"
+    echo ""
+    
+    echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
+    echo -e "${GREEN}✓ Configuration complete! Starting installation...${NC}"
+    echo -e "${CYAN}──────────────────────────────────────────────────────────────${NC}"
+    sleep 2
+}
+
 install_system() {
     print_step "Installing system packages"
     
@@ -131,6 +198,155 @@ clone_repo() {
     spinner $!
     
     print_ok "Repository cloned"
+}
+
+# Function to inject configuration into vpn.py
+inject_vpn_config() {
+    print_step "Injecting configuration into vpn.py"
+    
+    cd "$INSTALL_DIR"
+    
+    # Replace TOKEN in vpn.py
+    if [ -f "vpn.py" ]; then
+        sed -i "s/TOKEN = 'ваш токен'/TOKEN = '$BOT_TOKEN'/" vpn.py
+        sed -i "s/ADMIN_ID = айди в тг ваш/ADMIN_ID = $ADMIN_ID/" vpn.py
+        print_ok "Bot Token and Admin ID configured in vpn.py"
+    else
+        print_err "vpn.py not found!"
+    fi
+}
+
+# Function to create yookassa_integration.py with configuration
+create_yookassa_file() {
+    print_step "Creating yookassa_integration.py"
+    
+    cat > "$INSTALL_DIR/yookassa_integration.py" << EOF
+import uuid
+import logging
+from yookassa import Configuration, Payment
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+# Настройки ЮKassa
+YOOKASSA_SHOP_ID = "$YOOKASSA_SHOP_ID"
+YOOKASSA_SECRET_KEY = "$YOOKASSA_SECRET_KEY"
+
+# Инициализация ЮKassa
+Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
+
+def create_yookassa_payment(amount, description, payment_id, user_id, username, payment_method=None):
+    """Создает платеж в ЮKassa с выбором способа оплаты"""
+    try:
+        # Формируем уникальный ID платежа
+        idempotence_key = str(uuid.uuid4())
+        
+        # Базовые параметры платежа
+        payment_params = {
+            "amount": {
+                "value": amount,
+                "currency": "RUB"
+            },
+            "confirmation": {
+                "type": "redirect",
+                "return_url": f"https://t.me/karachay_aj_bot?check_payment_{payment_id}"
+            },
+            "description": description,
+            "metadata": {
+                "payment_id": payment_id,
+                "user_id": str(user_id),
+                "username": username,
+                "amount": amount
+            },
+            "capture": True
+        }
+        
+        # Добавляем метод оплаты если указан (для тестового магазина доступны карты и ЮMoney)
+        if payment_method:
+            payment_methods_map = {
+                "bank_card": {"type": "bank_card"},
+                "yoo_money": {"type": "yoo_money"},
+                "sberbank": {"type": "sberbank"},
+                "alfabank": {"type": "alfabank"},
+                "tinkoff_bank": {"type": "tinkoff_bank"},
+                "mobile_balance": {"type": "mobile_balance"}
+            }
+            
+            if payment_method in payment_methods_map:
+                payment_params["payment_method_data"] = payment_methods_map[payment_method]
+        
+        # Создаем платеж
+        payment = Payment.create(payment_params, idempotence_key)
+        
+        return {
+            "payment_id": payment.id,
+            "confirmation_url": payment.confirmation.confirmation_url,
+            "status": payment.status
+        }
+    except Exception as e:
+        logger.error(f"Ошибка создания платежа ЮKassa: {e}")
+        return None
+
+def create_payment_with_methods_menu(user_id, amount, description, payment_id, username):
+    """Создает платеж с выбором способа оплаты через меню"""
+    try:
+        # Создаем платеж с возможностью выбора способа
+        idempotence_key = str(uuid.uuid4())
+        
+        payment_params = {
+            "amount": {
+                "value": amount,
+                "currency": "RUB"
+            },
+            "confirmation": {
+                "type": "redirect",
+                "return_url": f"https://t.me/karachay_aj_bot?check_payment_{payment_id}"
+            },
+            "description": description,
+            "metadata": {
+                "payment_id": payment_id,
+                "user_id": str(user_id),
+                "username": username,
+                "amount": amount
+            },
+            "capture": True
+        }
+        
+        payment = Payment.create(payment_params, idempotence_key)
+        
+        return {
+            "payment_id": payment.id,
+            "confirmation_url": payment.confirmation.confirmation_url,
+            "status": payment.status
+        }
+    except Exception as e:
+        logger.error(f"Ошибка создания платежа: {e}")
+        return None
+
+def check_payment_status(payment_id):
+    """Проверяет статус платежа в ЮKassa"""
+    try:
+        payment = Payment.find_one(payment_id)
+        return {
+            "status": payment.status,
+            "paid": payment.paid,
+            "amount": payment.amount.value if hasattr(payment, 'amount') else None
+        }
+    except Exception as e:
+        logger.error(f"Ошибка проверки платежа: {e}")
+        return None
+
+def capture_payment(payment_id):
+    """Подтверждает платеж (если нужно)"""
+    try:
+        payment = Payment.capture(payment_id)
+        return payment.status == "succeeded"
+    except Exception as e:
+        logger.error(f"Ошибка подтверждения платежа: {e}")
+        return False
+EOF
+
+    print_ok "yookassa_integration.py created with configuration"
 }
 
 setup_venv() {
@@ -300,7 +516,7 @@ case "$1" in
         show_header
         echo -e "${WHITE}Bot Information:${NC}\n"
         echo -e "  ${BLUE}Author:${NC}     thetemirbolatov"
-        echo -e "  ${BLUE}GitHub:${NC}     thetemirbolatov-official"
+        echo -e "  ${BLUE}GitHub:${NC}     thetemirbolatov"
         echo -e "  ${BLUE}Version:${NC}    2.0.0"
         echo -e "  ${BLUE}Directory:${NC}  ${INSTALL_DIR}"
         echo ""
@@ -313,6 +529,21 @@ case "$1" in
         fi
         echo ""
         echo -e "${CYAN}Contacts:${NC} @thetemirbolatov"
+        echo ""
+        ;;
+    config)
+        show_header
+        echo -e "${WHITE}Current Configuration:${NC}\n"
+        if [ -f "${INSTALL_DIR}/vpn.py" ]; then
+            TOKEN=$(grep "^TOKEN = " "${INSTALL_DIR}/vpn.py" | cut -d"'" -f2)
+            ADMIN=$(grep "^ADMIN_ID = " "${INSTALL_DIR}/vpn.py" | cut -d' ' -f3)
+            echo -e "  ${BLUE}Bot Token:${NC}    ${TOKEN:0:10}..."
+            echo -e "  ${BLUE}Admin ID:${NC}     ${ADMIN}"
+        fi
+        if [ -f "${INSTALL_DIR}/yookassa_integration.py" ]; then
+            SHOP_ID=$(grep "^YOOKASSA_SHOP_ID = " "${INSTALL_DIR}/yookassa_integration.py" | cut -d'"' -f2)
+            echo -e "  ${BLUE}Shop ID:${NC}      ${SHOP_ID}"
+        fi
         echo ""
         ;;
     uninstall)
@@ -343,11 +574,12 @@ case "$1" in
         echo -e "  ${GREEN}status${NC}     Check status"
         echo -e "  ${GREEN}logs${NC}       View logs"
         echo -e "  ${GREEN}info${NC}       Bot info"
+        echo -e "  ${GREEN}config${NC}     Show config"
         echo -e "  ${GREEN}uninstall${NC}  Remove bot"
         echo ""
         echo -e "${BLUE}────────────────────────────────────────────${NC}"
         echo -e "${WHITE}Author:${NC} thetemirbolatov"
-        echo -e "${WHITE}GitHub:${NC} thetemirbolatov-official"
+        echo -e "${WHITE}GitHub:${NC} thetemirbolatov"
         echo ""
         ;;
 esac
@@ -382,6 +614,11 @@ show_done() {
     echo -e "${WHITE}XRARY VPN BOT${NC} ${BLUE}v${VERSION}${NC}"
     echo -e "${CYAN}Author:${NC} thetemirbolatov"
     echo ""
+    echo -e "${WHITE}Configuration:${NC}"
+    echo -e "  ${BLUE}Bot Token:${NC}   ${BOT_TOKEN:0:15}..."
+    echo -e "  ${BLUE}Admin ID:${NC}    ${ADMIN_ID}"
+    echo -e "  ${BLUE}Shop ID:${NC}     ${YOOKASSA_SHOP_ID}"
+    echo ""
     echo -e "${WHITE}Commands:${NC}"
     echo -e "  ${GREEN}xrary start${NC}     Start bot"
     echo -e "  ${GREEN}xrary stop${NC}      Stop bot"
@@ -389,6 +626,7 @@ show_done() {
     echo -e "  ${GREEN}xrary status${NC}    Check status"
     echo -e "  ${GREEN}xrary logs${NC}      View logs"
     echo -e "  ${GREEN}xrary info${NC}      Bot info"
+    echo -e "  ${GREEN}xrary config${NC}    Show config"
     echo -e "  ${GREEN}xrary uninstall${NC} Remove bot"
     echo ""
     echo -e "${CYAN}Contacts:${NC} @thetemirbolatov (Telegram, VK, Instagram)"
@@ -400,8 +638,11 @@ main() {
     print_header
     check_root
     check_net
+    get_configuration
     install_system
     clone_repo
+    inject_vpn_config
+    create_yookassa_file
     setup_venv
     install_python
     create_req
