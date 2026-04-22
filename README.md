@@ -30,13 +30,17 @@ wget -O - https://raw.githubusercontent.com/thetemirbolatov/Telegram-Bot-VPN/mai
    · YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в файле yookassa_integration.py
 2. Запустите бота:
    ```bash
-   sudo systemctl start vpnbot
-   sudo systemctl enable vpnbot
+   xrary start
    ```
 3. Проверьте статус:
    ```bash
-   sudo systemctl status vpnbot
+   xrary info
    ```
+4. Выключите бота:
+   ```bash
+   xrary stop
+   ```
+   
 ---
 
 # Оглавление
